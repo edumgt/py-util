@@ -1,4 +1,4 @@
-# Net20: 네트워크 기초(소켓/HTTP) 완전 입문자용 Python 예제 20개 (Windows venv)
+# 네트워크 기초(소켓/HTTP) 완전 입문자용 Python 예제 
 
 Docker 없이 **Windows 로컬 + venv**만으로 “소켓/HTTP”를 처음부터 연습하는 예제 20개입니다.  
 각 예제는 **짧고**, **복사-실행**이 가능하도록 만들었습니다.
@@ -63,4 +63,3 @@ powershell -ExecutionPolicy Bypass -File scripts\run_safe.ps1
 - `p3-local` : 로컬 서버/클라이언트 예제 묶음
 - `p4-async` : asyncio/동시성 맛보기
 
-작성일: 2025-12-19
