@@ -28,7 +28,8 @@
     → http://localhost:30800/docs 에서 Swagger UI 확인
 ```
 
-자세한 가이드 → [docs/CODESPACES.md](docs/CODESPACES.md)
+자세한 가이드 → [docs/CODESPACES.md](docs/CODESPACES.md)  
+머신 크기 안내 → [docs/CODESPACES.md#codespaces가-4코어-8gb를-지원하나요](docs/CODESPACES.md#-codespaces가-4코어-8gb를-지원하나요)
 
 ## 아키텍처
 

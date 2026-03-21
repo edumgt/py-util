@@ -18,8 +18,18 @@
     }
   },
 
-  // k8s validation needs at least 4 vCPU / 8 GB RAM.
-  // Codespaces will recommend this machine size when creating a codespace.
+  // hostRequirements: pre-selects the minimum machine size when creating a
+  // codespace (GitHub Codespaces 공식 지원 머신).  Users can override it.
+  //
+  // GitHub Codespaces 지원 머신 크기 (2025년 기준):
+  //   2-core  /  4 GB RAM / 32 GB  ← 기본값, GitHub Free 120 core-hrs/월
+  //   4-core  /  8 GB RAM / 32 GB  ← k3d k8s 검증 최소 권장 (30 hrs/월 free)
+  //   8-core  / 16 GB RAM / 64 GB  ← 여유 있는 k8s 검증 (15 hrs/월 free)
+  //  16-core  / 32 GB RAM / 128 GB
+  //  32-core  / 64 GB RAM / 128 GB
+  //
+  // 무료 할당량(GitHub Free): 120 core-hours/월 = 4코어 기준 30 시간/월
+  // 상세 내용: docs/CODESPACES.md "머신 크기" 섹션 참조
   "hostRequirements": {
     "cpus": 4,
     "memory": "8gb",
