@@ -1,65 +1,87 @@
-# 네트워크 기초(소켓/HTTP) 완전 입문자용 Python 예제 
+# Python Network Advanced – FastAPI on Kubernetes (VMware)
 
-Docker 없이 **Windows 로컬 + venv**만으로 “소켓/HTTP”를 처음부터 연습하는 예제 20개입니다.  
-각 예제는 **짧고**, **복사-실행**이 가능하도록 만들었습니다.
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/edumgt/Python_Network_Advanced)
 
-## 준비물
-- Windows 10/11
-- Python 3.11+ (권장 3.12)
-- (권장) VS Code, Git for Windows
+네트워크 기초(소켓/HTTP) Python 예제를 **FastAPI + uvicorn** REST API로 서빙하고,
+**VMware VM** 위의 **단일 노드 Kubernetes** 클러스터에 배포하는 프로젝트입니다.
+이미지는 클러스터 내 **Harbor** Pod(레지스트리)에 push/pull 하며,
+**GitHub Actions**이 빌드 → push → 배포를 자동화합니다.
 
-## 1) 설치(venv)
-PowerShell에서 프로젝트 루트:
+> **Codespaces 검증 가이드** → [docs/CODESPACES.md](docs/CODESPACES.md)  
+> **전체 배포 가이드** → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
-```powershell
+## Codespaces에서 바로 검증하기
+
+로컬 설치 없이 브라우저만으로 이 저장소를 완전히 검증할 수 있습니다.
+
+> **💡 VMware 없이 k8s 검증 가능!** — Codespaces 안에서 k3d(Docker 기반 경량 k8s)로
+> Harbor 레지스트리 + FastAPI Pod를 실제 Kubernetes 위에서 구동합니다.
+
+```
+[A] 빠른 검증 (코드/API 테스트, 2코어/4GB):
+    pytest tests/ -v
+    uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+[B] 전체 k8s 스택 검증 (VMware 불필요, 4코어/8GB 권장):
+    bash infra/setup-codespaces-k8s.sh
+    → Harbor Pod + FastAPI Pod가 k8s 위에서 동작
+    → http://localhost:30800/docs 에서 Swagger UI 확인
+```
+
+자세한 가이드 → [docs/CODESPACES.md](docs/CODESPACES.md)  
+머신 크기 안내 → [docs/CODESPACES.md#codespaces가-4코어-8gb를-지원하나요](docs/CODESPACES.md#-codespaces가-4코어-8gb를-지원하나요)
+
+## 아키텍처
+
+```
+GitHub Actions
+  │ build & push
+  ▼
+Harbor registry Pod (NodePort 30500, namespace: harbor)
+  │ pull
+  ▼
+FastAPI(uvicorn) Pod (NodePort 30800, namespace: netapp)
+  ← 모두 단일 노드 k8s (VMware Ubuntu VM) 위에서 실행
+```
+
+## 빠른 시작 – 로컬 개발
+
+```bash
 python -m venv venv
-venv\Scripts\activate
-python -m pip install -U pip
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+
+# FastAPI 서버 실행
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Swagger UI: http://localhost:8000/docs
 ```
 
-> 대부분 예제는 표준 라이브러리만 사용합니다. `requests`는 일부 HTTP 예제에서만 씁니다.
+## 빠른 시작 – Kubernetes 배포
 
-## 2) 실행(추천 순서)
-- **docs/LEARNING_PATH.md** 를 먼저 읽고, 01 → 20 순서로 실행하세요.
+```bash
+# 1) VMware VM에 단일 노드 k8s 설치
+sudo ./infra/setup-k8s.sh
 
-```powershell
-python examples\01_what_is_ip_port.py --host example.com
-python examples\04_tcp_connect.py --host example.com --port 443
-python examples\08_http_get_urllib.py --url https://example.com
-python examples\12_local_http_server.py
+# 2) Harbor + FastAPI 앱 배포 (NODE_IP = VM IP)
+sudo ./infra/deploy-k8s-apps.sh <NODE_IP>
+
+# 접속: http://<NODE_IP>:30800/docs
 ```
 
-## 3) 로컬 서버 예제(터미널 2개 필요)
-### A) TCP 에코 서버
-터미널 1:
-```powershell
-python examples\15_tcp_echo_server.py
-```
-터미널 2:
-```powershell
-python examples\16_tcp_echo_client.py --msg "hello"
+## 테스트
+
+```bash
+pytest tests/ -v
 ```
 
-### B) 로컬 HTTP 서버 + 클라이언트
-터미널 1:
-```powershell
-python examples\12_local_http_server.py
-```
-터미널 2:
-```powershell
-python examples\13_local_http_client.py --base http://127.0.0.1:8001
-```
+## 예제 스크립트 (직접 실행)
 
-## 4) 한 번에 다 돌리기(가능한 것만)
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\run_safe.ps1
-```
+| 스크립트 | 설명 |
+|----------|------|
+| `examples/01_what_is_ip_port.py` | DNS 조회 |
+| `examples/04_tcp_connect.py` | TCP 접속 테스트 |
+| `examples/08_http_get_urllib.py` | urllib HTTP GET |
+| `examples/20_async_multi_connect.py` | asyncio 멀티 접속 |
 
-## 5) Git 체크포인트(태그)
-- `p0-start` : 프로젝트 시작(설치/실행)
-- `p1-socket` : 소켓 기초 예제 묶음
-- `p2-http` : HTTP 기초 예제 묶음
-- `p3-local` : 로컬 서버/클라이언트 예제 묶음
-- `p4-async` : asyncio/동시성 맛보기
-
+- 학습 순서: **docs/LEARNING_PATH.md** 참고
+- Git 태그: `p0-start` `p1-socket` `p2-http` `p3-local` `p4-async`
