@@ -1,51 +1,148 @@
-name: Upload Python Source to S3 (OIDC)
+name: Build, Push to Harbor & Deploy to K8s
 
 on:
   push:
     branches: ["main"]
-    # 파이썬/설정 파일 바뀔 때만 실행하고 싶으면 paths를 쓰세요
     paths:
       - "**/*.py"
       - "requirements.txt"
       - "pyproject.toml"
-      - "poetry.lock"
-      - ".github/workflows/upload-python-to-s3.yml"
+      - "Dockerfile"
+      - "k8s/**"
+      - ".github/workflows/main.yml"
 
-permissions:
-  id-token: write   # OIDC에 필요
-  contents: read
+# ──────────────────────────────────────────────────────────────────────────────
+# Required repository secrets / variables:
+#
+#   HARBOR_HOST      – IP or hostname:port of the Harbor registry NodePort
+#                      e.g. "192.168.100.10:30500"
+#   HARBOR_USER      – Harbor registry username  (default: admin)
+#   HARBOR_PASSWORD  – Harbor registry password
+#   K8S_KUBECONFIG   – base64-encoded kubeconfig for the single-node cluster
+#                      e.g.  base64 -w0 ~/.kube/config
+# ──────────────────────────────────────────────────────────────────────────────
 
 env:
-  AWS_REGION: ap-northeast-2
-  S3_BUCKET: my-bucket-name
-  S3_PREFIX: myapp/source  # S3 폴더(프리픽스)
+  IMAGE_NAME: python-network-advanced
+  K8S_NAMESPACE: netapp
 
 jobs:
-  upload:
+  # ── 1. Run tests ─────────────────────────────────────────────────────────────
+  test:
+    name: Test
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # ✅ GitHub OIDC -> AWS Role Assume
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsDeployRole
-          aws-region: ${{ env.AWS_REGION }}
+          python-version: "3.12"
 
-      # ✅ 소스 그대로 S3 업로드(동기화)
-      - name: Sync repo to S3 (source upload)
+      - name: Install dependencies
         run: |
-          aws s3 sync . "s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/" \
-            --delete \
-            --exclude ".git/*" \
-            --exclude ".github/*" \
-            --exclude "__pycache__/*" \
-            --exclude ".venv/*" \
-            --exclude "venv/*" \
-            --exclude ".pytest_cache/*" \
-            --exclude ".mypy_cache/*" \
-            --exclude ".idea/*" \
-            --exclude ".vscode/*"
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/ -v
+
+  # ── 2. Build Docker image & push to Harbor ───────────────────────────────────
+  build-push:
+    name: Build & Push
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.HARBOR_HOST }}" ]; then
+            echo "::error::Secret HARBOR_HOST is not set. Cannot push image."
+            exit 1
+          fi
+
+      - name: Generate image tag
+        id: meta
+        run: |
+          HARBOR="${{ secrets.HARBOR_HOST }}"
+          TAG="${HARBOR}/${{ env.K8S_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          LATEST="${HARBOR}/${{ env.K8S_NAMESPACE }}/${{ env.IMAGE_NAME }}:latest"
+          echo "latest=${LATEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.HARBOR_HOST }}
+          username: ${{ secrets.HARBOR_USER }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.latest }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 3. Deploy to Kubernetes ───────────────────────────────────────────────────
+  deploy:
+    name: Deploy to K8s
+    needs: build-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.K8S_KUBECONFIG }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Apply namespaces & Harbor
+        run: |
+          kubectl apply -f k8s/00-namespaces.yaml
+          kubectl apply -f k8s/01-harbor.yaml
+
+      - name: Deploy FastAPI app
+        env:
+          # HARBOR_HOST is "ip:port" – extract just the IP for NODE_IP substitution
+          HARBOR_REGISTRY: ${{ secrets.HARBOR_HOST }}
+        run: |
+          NODE_IP="${HARBOR_REGISTRY%%:*}"
+          sed "s|\${NODE_IP}|${NODE_IP}|g" k8s/02-netapp.yaml | kubectl apply -f -
+
+      - name: Update image tag
+        run: |
+          kubectl set image deployment/netapp \
+            netapp=${{ needs.build-push.outputs.image_tag }} \
+            -n ${{ env.K8S_NAMESPACE }}
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/netapp \
+            -n ${{ env.K8S_NAMESPACE }} \
+            --timeout=120s
+
+      - name: Show pods
+        run: kubectl get pods -n ${{ env.K8S_NAMESPACE }} -o wide
+
+

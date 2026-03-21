@@ -1,0 +1,86 @@
+# Harbor registry – single-pod deployment using the official harbor-core image.
+# For a production setup, use the official Helm chart:
+#   helm repo add harbor https://helm.goharbor.io
+#   helm install harbor harbor/harbor -n harbor --create-namespace -f harbor-values.yaml
+#
+# This manifest provides a minimal Harbor all-in-one for a single-node VMware k8s lab.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harbor-data
+  namespace: harbor
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harbor
+  namespace: harbor
+  labels:
+    app: harbor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: harbor
+  template:
+    metadata:
+      labels:
+        app: harbor
+    spec:
+      containers:
+        - name: registry
+          image: registry:2
+          ports:
+            - containerPort: 5000
+          env:
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: /var/lib/registry
+            - name: REGISTRY_HTTP_ADDR
+              value: ":5000"
+          volumeMounts:
+            - name: harbor-data
+              mountPath: /var/lib/registry
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: harbor-data
+          persistentVolumeClaim:
+            claimName: harbor-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: harbor
+  namespace: harbor
+spec:
+  type: NodePort
+  selector:
+    app: harbor
+  ports:
+    - name: registry
+      protocol: TCP
+      port: 5000
+      targetPort: 5000
+      nodePort: 30500
