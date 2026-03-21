@@ -1,11 +1,26 @@
 # Python Network Advanced – FastAPI on Kubernetes (VMware)
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/edumgt/Python_Network_Advanced)
+
 네트워크 기초(소켓/HTTP) Python 예제를 **FastAPI + uvicorn** REST API로 서빙하고,
 **VMware VM** 위의 **단일 노드 Kubernetes** 클러스터에 배포하는 프로젝트입니다.
 이미지는 클러스터 내 **Harbor** Pod(레지스트리)에 push/pull 하며,
 **GitHub Actions**이 빌드 → push → 배포를 자동화합니다.
 
+> **Codespaces 검증 가이드** → [docs/CODESPACES.md](docs/CODESPACES.md)  
 > **전체 배포 가이드** → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+
+## Codespaces에서 바로 검증하기
+
+로컬 설치 없이 브라우저만으로 이 저장소를 완전히 검증할 수 있습니다.
+
+```
+1. 위 "Open in GitHub Codespaces" 배지 클릭
+2. 컨테이너 시작 완료 후 터미널에서:
+   pytest tests/ -v                                     # 테스트 전체 실행
+   uvicorn app.main:app --host 0.0.0.0 --port 8000     # FastAPI 서버 시작
+3. Codespaces가 포트 8000을 자동 포워딩 → /docs 에서 Swagger UI 확인
+```
 
 ## 아키텍처
 
