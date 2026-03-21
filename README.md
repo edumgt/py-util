@@ -14,13 +14,21 @@
 
 로컬 설치 없이 브라우저만으로 이 저장소를 완전히 검증할 수 있습니다.
 
+> **💡 VMware 없이 k8s 검증 가능!** — Codespaces 안에서 k3d(Docker 기반 경량 k8s)로
+> Harbor 레지스트리 + FastAPI Pod를 실제 Kubernetes 위에서 구동합니다.
+
 ```
-1. 위 "Open in GitHub Codespaces" 배지 클릭
-2. 컨테이너 시작 완료 후 터미널에서:
-   pytest tests/ -v                                     # 테스트 전체 실행
-   uvicorn app.main:app --host 0.0.0.0 --port 8000     # FastAPI 서버 시작
-3. Codespaces가 포트 8000을 자동 포워딩 → /docs 에서 Swagger UI 확인
+[A] 빠른 검증 (코드/API 테스트, 2코어/4GB):
+    pytest tests/ -v
+    uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+[B] 전체 k8s 스택 검증 (VMware 불필요, 4코어/8GB 권장):
+    bash infra/setup-codespaces-k8s.sh
+    → Harbor Pod + FastAPI Pod가 k8s 위에서 동작
+    → http://localhost:30800/docs 에서 Swagger UI 확인
 ```
+
+자세한 가이드 → [docs/CODESPACES.md](docs/CODESPACES.md)
 
 ## 아키텍처
 

@@ -2,16 +2,50 @@
   "name": "Python Network Advanced",
   "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bullseye",
 
-  // Forward the FastAPI uvicorn port so it opens automatically in the browser.
-  "forwardPorts": [8000],
-  "portsAttributes": {
-    "8000": {
-      "label": "FastAPI (uvicorn)",
-      "onAutoForward": "openBrowser"
+  // docker-in-docker: enables Docker daemon inside Codespaces so k3d (k3s in
+  // Docker) can create a full Kubernetes cluster without VMware.
+  // kubectl-helm-minikube: installs kubectl (helm/minikube disabled).
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "enableNonRootDocker": "true",
+      "moby": "true"
+    },
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "version": "latest",
+      "helm": "none",
+      "minikube": "none"
     }
   },
 
-  // Install Python dependencies as soon as the container is created.
+  // k8s validation needs at least 4 vCPU / 8 GB RAM.
+  // Codespaces will recommend this machine size when creating a codespace.
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+
+  // 8000  – FastAPI uvicorn (direct, no k8s)
+  // 30500 – Harbor registry NodePort (via k3d port mapping)
+  // 30800 – FastAPI NodePort       (via k3d port mapping)
+  "forwardPorts": [8000, 30500, 30800],
+  "portsAttributes": {
+    "8000": {
+      "label": "FastAPI (uvicorn 직접)",
+      "onAutoForward": "openBrowser"
+    },
+    "30500": {
+      "label": "Harbor registry (k8s NodePort)",
+      "onAutoForward": "silent"
+    },
+    "30800": {
+      "label": "FastAPI (k8s NodePort)",
+      "onAutoForward": "notify"
+    }
+  },
+
+  // Install Python deps + k3d after the container is created.
   "postCreateCommand": "bash .devcontainer/post-create.sh",
 
   // Useful VS Code extensions for this project.

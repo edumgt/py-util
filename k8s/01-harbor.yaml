@@ -1,9 +1,10 @@
-# Harbor registry – single-pod deployment using the official harbor-core image.
+# Harbor registry – single-pod deployment using the official registry:2 image.
 # For a production setup, use the official Helm chart:
 #   helm repo add harbor https://helm.goharbor.io
 #   helm install harbor harbor/harbor -n harbor --create-namespace -f harbor-values.yaml
 #
-# This manifest provides a minimal Harbor all-in-one for a single-node VMware k8s lab.
+# This manifest provides a minimal OCI-compatible registry for a single-node k8s lab
+# (VMware-based or Codespaces k3d).  See infra/setup-codespaces-k8s.sh for Codespaces usage.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
