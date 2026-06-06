@@ -24,20 +24,40 @@ _PRIVATE_NETWORKS = [
 ]
 
 
-def _validate_external_url(url: str) -> None:
+def _validate_external_url(url: str) -> dict[str, str]:
     parsed = urlparse(url)
     if parsed.scheme not in _ALLOWED_SCHEMES:
         raise HTTPException(status_code=400, detail=f"URL scheme '{parsed.scheme}' is not allowed. Use http or https.")
+    if parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="Credentials in URL are not allowed.")
     hostname = parsed.hostname
     if not hostname:
         raise HTTPException(status_code=400, detail="URL is missing a hostname.")
     try:
         resolved_ip = socket.gethostbyname(hostname)
         addr = ipaddress.ip_address(resolved_ip)
-    except (socket.gaierror, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=f"Cannot resolve hostname: {exc}")
+    except (socket.gaierror, ValueError):
+        raise HTTPException(status_code=400, detail="Cannot resolve hostname.")
     if any(addr in net for net in _PRIVATE_NETWORKS):
         raise HTTPException(status_code=400, detail="Requests to private/internal addresses are not allowed.")
+
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+
+    return {
+        "scheme": parsed.scheme,
+        "host": hostname,
+        "resolved_ip": resolved_ip,
+        "path_with_query": path,
+    }
+
+
+def _perform_external_get(url: str, timeout: float):
+    target = _validate_external_url(url)
+    safe_url = f"{target['scheme']}://{target['resolved_ip']}{target['path_with_query']}"
+    headers = {"Host": target["host"]}
+    return _requests.get(safe_url, timeout=timeout, allow_redirects=False, headers=headers)
 
 
 @router.get("/dns", summary="DNS 조회 (host → IP)")
@@ -82,8 +102,14 @@ def tcp_connect(
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return {"ok": True, "host": host, "port": port, "latency_ms": int((time.time() - t0) * 1000)}
-    except Exception as exc:
-        return {"ok": False, "host": host, "port": port, "latency_ms": int((time.time() - t0) * 1000), "error": str(exc)}
+    except Exception:
+        return {
+            "ok": False,
+            "host": host,
+            "port": port,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "error": "connection failed",
+        }
 
 
 @router.get("/check-ports", summary="포트 목록 일괄 점검")
@@ -111,11 +137,12 @@ def http_get(
     url: str = Query(..., description="요청할 URL"),
     timeout: float = Query(4.0, gt=0, le=15),
 ):
-    _validate_external_url(url)
     try:
-        r = _requests.get(url, timeout=timeout, allow_redirects=False)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        r = _perform_external_get(url, timeout)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="External request failed")
     return {
         "status_code": r.status_code,
         "url": r.url,
@@ -128,7 +155,7 @@ def http_get(
 def _get_with_retry(url: str, timeout: float) -> int:
     @retry(stop=stop_after_attempt(4), wait=wait_exponential_jitter(initial=0.3, max=2.0), reraise=True)
     def _inner():
-        r = _requests.get(url, timeout=timeout)
+        r = _perform_external_get(url, timeout)
         return r.status_code
 
     return _inner()
@@ -139,11 +166,12 @@ def http_get_retry(
     url: str = Query(..., description="요청할 URL"),
     timeout: float = Query(2.0, gt=0, le=10),
 ):
-    _validate_external_url(url)
     try:
         status = _get_with_retry(url, timeout)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="External request failed")
     return {"url": url, "final_status_code": status}
 
 
@@ -153,8 +181,8 @@ async def _tcp_ping(host: str, port: int, timeout: float) -> dict:
         writer.close()
         await writer.wait_closed()
         return {"host": host, "port": port, "ok": True}
-    except Exception as exc:
-        return {"host": host, "port": port, "ok": False, "error": str(exc)}
+    except Exception:
+        return {"host": host, "port": port, "ok": False, "error": "connection failed"}
 
 
 @router.get("/async-tcp-ping", summary="asyncio 기반 멀티 포트 TCP 핑")
