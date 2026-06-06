@@ -56,6 +56,31 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 # Swagger UI: http://localhost:8000/docs
 ```
 
+## 로컬 Docker 분석 대시보드
+
+로컬 PC의 Docker Desktop/Engine 환경을 **읽기 전용**으로 분석하는 대시보드입니다.
+
+```bash
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+접속:
+- 대시보드: `http://localhost:8000/docker/dashboard`
+- Docker API 요약: `http://localhost:8000/docker/summary`
+
+제공 기능:
+- 컨테이너/이미지/네트워크/볼륨 현황
+- 컨테이너별 CPU/메모리 stats API (`/docker/containers/{id}/stats`)
+- 상태 필터(running/exited) 및 5초 polling 갱신
+
+보안/운영 원칙:
+- Docker 제어(삭제/중지/재시작) 기능은 제공하지 않음
+- Docker daemon 미실행/권한 부족 시 graceful fallback 응답 반환
+- 외부 노출 환경에서는 Docker socket 접근 권한 최소화 권장
+
 ## 빠른 시작 – Kubernetes 배포
 
 ```bash

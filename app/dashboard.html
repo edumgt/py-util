@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Docker Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f6f8fb; color: #1f2937; }
+    h1 { margin: 0 0 12px; }
+    .muted { color: #6b7280; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 14px 0 18px; }
+    .card { background: white; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .card .k { font-size: 12px; color: #6b7280; }
+    .card .v { font-size: 22px; font-weight: 700; margin-top: 6px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .panel { background: white; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid #e5e7eb; text-align: left; padding: 7px; vertical-align: top; }
+    .error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; padding: 10px; border-radius: 8px; margin-top: 10px; display: none; }
+    .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    input, select, button { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; background: white; }
+    @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>로컬 Docker 분석 대시보드</h1>
+  <p class="muted">읽기 전용 분석: 컨테이너/이미지/네트워크/볼륨/리소스 상태</p>
+  <div class="error" id="err"></div>
+
+  <div class="grid" id="metrics"></div>
+
+  <div class="row">
+    <section class="panel">
+      <div class="toolbar">
+        <h3 style="margin:0;">Containers</h3>
+        <select id="statusFilter">
+          <option value="all">all</option>
+          <option value="running">running</option>
+          <option value="exited">exited</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>Image</th><th>Status</th><th>Ports</th></tr></thead>
+        <tbody id="containers"></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h3 style="margin-top:0;">Images</h3>
+      <table>
+        <thead><tr><th>Tag</th><th>ID</th><th>Size(MB)</th></tr></thead>
+        <tbody id="images"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <div class="row" style="margin-top:12px;">
+    <section class="panel">
+      <h3 style="margin-top:0;">Networks</h3>
+      <table>
+        <thead><tr><th>Name</th><th>Driver</th><th>Containers</th></tr></thead>
+        <tbody id="networks"></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h3 style="margin-top:0;">Volumes</h3>
+      <table>
+        <thead><tr><th>Name</th><th>Driver</th><th>Mountpoint</th></tr></thead>
+        <tbody id="volumes"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    const err = document.getElementById('err');
+    const metrics = document.getElementById('metrics');
+
+    function showError(text) {
+      err.style.display = 'block';
+      err.textContent = text;
+    }
+
+    function hideError() {
+      err.style.display = 'none';
+      err.textContent = '';
+    }
+
+    function td(text) { return `<td>${text ?? ''}</td>`; }
+
+    function renderSummary(summary) {
+      const m = summary.metrics || {};
+      const cards = [
+        ['Containers', m.containers_total],
+        ['Running', m.containers_running],
+        ['Exited', m.containers_exited],
+        ['Images', m.images_total],
+        ['Networks', m.networks_total],
+        ['Volumes', m.volumes_total],
+      ];
+      metrics.innerHTML = cards.map(([k, v]) => `<div class="card"><div class="k">${k}</div><div class="v">${v ?? 0}</div></div>`).join('');
+    }
+
+    function renderTable(id, rows) {
+      document.getElementById(id).innerHTML = rows.join('') || '<tr><td colspan="4" class="muted">No data</td></tr>';
+    }
+
+    function renderContainers(items) {
+      const rows = items.map(c => {
+        const ports = (c.ports || []).map(p => `${p.container}→${p.host || '-'}`).join('<br>');
+        return `<tr>${td(c.name)}${td(c.image)}${td(c.status)}${td(ports)}</tr>`;
+      });
+      renderTable('containers', rows);
+    }
+
+    function renderImages(items) {
+      const rows = items.map(i => `<tr>${td((i.tags || []).join('<br>'))}${td(i.id)}${td(i.size_mb)}</tr>`);
+      renderTable('images', rows);
+    }
+
+    function renderNetworks(items) {
+      const rows = items.map(n => `<tr>${td(n.name)}${td(n.driver)}${td(n.containers)}</tr>`);
+      renderTable('networks', rows);
+    }
+
+    function renderVolumes(items) {
+      const rows = items.map(v => `<tr>${td(v.name)}${td(v.driver)}${td(v.mountpoint)}</tr>`);
+      renderTable('volumes', rows);
+    }
+
+    async function loadDashboard(status='all') {
+      hideError();
+      const [sum, cont, img, net, vol] = await Promise.all([
+        fetch('/docker/summary').then(r => r.json()),
+        fetch('/docker/containers?status=' + encodeURIComponent(status)).then(r => r.json()),
+        fetch('/docker/images').then(r => r.json()),
+        fetch('/docker/networks').then(r => r.json()),
+        fetch('/docker/volumes').then(r => r.json()),
+      ]);
+
+      if (!sum.available || !cont.available || !img.available || !net.available || !vol.available) {
+        showError((sum.error || cont.error || img.error || net.error || vol.error || {}).message || 'Docker unavailable');
+      }
+
+      renderSummary(sum.available ? sum : { metrics: {} });
+      renderContainers(cont.items || []);
+      renderImages(img.items || []);
+      renderNetworks(net.items || []);
+      renderVolumes(vol.items || []);
+    }
+
+    document.getElementById('statusFilter').addEventListener('change', (e) => loadDashboard(e.target.value));
+    loadDashboard();
+    setInterval(() => {
+      const status = document.getElementById('statusFilter').value;
+      loadDashboard(status);
+    }, 5000);
+  </script>
+</body>
+</html>
