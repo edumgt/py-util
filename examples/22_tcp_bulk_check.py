@@ -1,5 +1,8 @@
 """
-04) TCP 접속 테스트: cleaned_sites.txt의 URL 목록을 읽어서 포트 오픈 여부 확인 후 result.txt로 저장
+22) TCP 벌크 체크: cleaned_sites.txt의 URL 목록을 읽어 포트 오픈 여부 확인 후 result.txt(TSV)로 저장
+    04_tcp_connect.py의 실용 확장형 — 파일 I/O + URL 파싱 + 결과 TSV 출력
+    실행: python examples/22_tcp_bulk_check.py [--infile cleaned_sites.txt] [--outfile result.txt]
+          (프로젝트 루트에서)
 """
 from __future__ import annotations
 

@@ -1,7 +1,8 @@
 """
-memory_demo.py
-- 시스템 메모리(총/가용 등) 조회
+시스템 메모리 조회 및 MemoryError 처리 데모
+- 메모리 정보 조회: psutil / Windows ctypes / /proc/meminfo 순으로 시도
 - 안전한 메모리 할당 루프(목표 GB까지만 시도) + MemoryError 처리
+실행: python scripts/memory_demo.py
 """
 
 from __future__ import annotations

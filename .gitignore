@@ -5,3 +5,7 @@ __pycache__/
 reports/
 .cache/
 .DS_Store
+
+download/
+company*.txt
+result_kosis.md

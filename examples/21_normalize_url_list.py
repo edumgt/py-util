@@ -1,4 +1,8 @@
-# simple_handle_sites.py
+"""
+21) URL 목록 정규화·중복 제거: sites.txt → cleaned_sites.txt
+    03_parse_url.py의 실용 확장형 — 파일 I/O + scheme 자동 보완 + 중복 제거
+    실행: python examples/21_normalize_url_list.py  (프로젝트 루트에서)
+"""
 from urllib.parse import urlparse
 
 IN_FILE = "sites.txt"
